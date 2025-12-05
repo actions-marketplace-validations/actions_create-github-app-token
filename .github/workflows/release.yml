@@ -1,8 +1,11 @@
 name: release
-"on":
+
+on:
   push:
     branches:
+      - "*.x"
       - main
+      - beta
 
 permissions:
   contents: write
@@ -14,24 +17,25 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      # build local version to create token
+      - uses: actions/checkout@v6
         with:
-          cache: npm
-          node-version: lts/*
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+
       - run: npm ci
       - run: npm run build
-      - uses: ./ # Uses the action in the root directory
+      - uses: ./
         id: app-token
         with:
-          app_id: ${{ vars.RELEASER_APP_ID }}
-          private_key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
-
-      - id: commit
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: "build: update dist files"
-      - run: npm i semantic-release-plugin-github-breaking-version-tag
-      - run: npx semantic-release
+          app-id: ${{ vars.RELEASER_APP_ID }}
+          private-key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
+      # install release dependencies and release
+      - run: npm install --no-save @semantic-release/git semantic-release-plugin-github-breaking-version-tag
+      - run: npx semantic-release --debug
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

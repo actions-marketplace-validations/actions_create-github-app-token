@@ -1,26 +1,55 @@
 name: test
-on: [push]
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  integration:
+    name: integration
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
         with:
-          node-version: "16.16"
-          cache: "npm"
+          node-version-file: package.json
+
+      - run: npm ci
+      - run: npm test
+
+  end-to-end:
+    name: end-to-end
+    runs-on: ubuntu-latest
+    # do not run from forks, as forks don’t have access to repository secrets
+    if: github.event_name == 'merge_group' || github.event.pull_request.head.repo.owner.login == github.event.pull_request.base.repo.owner.login
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
       - run: npm ci
       - run: npm run build
       - uses: ./ # Uses the action in the root directory
-        id: demo
+        id: test
         with:
-          app_id: ${{ vars.TEST_APP_ID }}
-          private_key: ${{ secrets.TEST_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.TEST_APP_ID }}
+          private-key: ${{ secrets.TEST_APP_PRIVATE_KEY }}
       - uses: octokit/request-action@v2.x
         id: get-repository
         env:
-          GITHUB_TOKEN: ${{ steps.demo.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.test.outputs.token }}
         with:
           route: GET /installation/repositories
       - run: echo '${{ steps.get-repository.outputs.data }}'
